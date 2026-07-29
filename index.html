@@ -28,7 +28,7 @@
   input[type=number],select{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:8px 9px;outline:none}
   input:focus,select:focus{border-color:var(--ac)}
   .row{display:grid;gap:8px}
-  .r2{grid-template-columns:1fr 1fr}.r3{grid-template-columns:1fr 1fr 1fr}
+  .r2{grid-template-columns:repeat(2,minmax(0,1fr))}.r3{grid-template-columns:repeat(3,minmax(0,1fr))}
   .btn{background:var(--bg3);border:1px solid var(--line);color:var(--tx);padding:7px 11px;border-radius:8px;cursor:pointer;font-size:13px}
   .btn.g{background:none;color:var(--tx2)}
   .btn:active{transform:scale(.97)}
@@ -136,8 +136,8 @@
   .stp{display:flex;align-items:stretch;background:var(--bg3);border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .stp:focus-within{border-color:var(--ac)}
   .stp input{border:none!important;background:none;text-align:center;flex:1;min-width:0;border-radius:0;padding:8px 2px;color:var(--tx)}
-  .stp .sbtn{border:none;background:var(--bg2);color:var(--ac);font-size:19px;font-weight:700;
-             width:42px;flex:none;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center}
+  .stp .sbtn{border:none;background:var(--bg2);color:var(--ac);font-size:18px;font-weight:700;
+             width:36px;flex:none;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center}
   .stp .sbtn:active{background:var(--ac);color:#04222b}
 
   /* 不計重的配件 */
@@ -341,17 +341,17 @@ function buildEdit(){
   w.innerHTML=`
     <div id="edit">
       <div class="t">${esc(it.n)}<span>${it.on?"":"已取下"}</span></div>
-      <div class="row r3" style="margin-bottom:8px">
+      <div class="row r2" style="margin-bottom:8px">
         <div><label>單件重 (g)</label><input type="number" inputmode="decimal" step="0.005" id="eW" value="${it.w}"></div>
-        <div><label>數量</label>
-          <div class="stp" data-step="1" data-min="1" data-dec="0">
-            <button class="sbtn" data-d="-">−</button><input id="eQ" inputmode="numeric" value="${it.q}" readonly><button class="sbtn" data-d="+">＋</button>
-          </div></div>
         <div><label>材質</label><select id="eS">${
           MAT.map(m=>`<option value="${m[1]}"${Math.abs(m[1]-it.s)<1e-9?" selected":""}>${m[0]} ${m[1]}</option>`).join("")
           +(MAT.some(m=>Math.abs(m[1]-it.s)<1e-9)?"":`<option value="${it.s}" selected>比重 ${it.s}</option>`)
         }</select></div>
       </div>
+      <div style="margin-bottom:8px"><label>數量</label>
+        <div class="stp" data-step="1" data-min="1" data-dec="0">
+          <button class="sbtn" data-d="-">−</button><input id="eQ" inputmode="numeric" value="${it.q}" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
       <div style="margin-bottom:8px"><label>位置</label><select id="eB">${
         BANDS.map(b=>`<option value="${b[0]}"${b[0]===it.b?" selected":""}>${b[1]}</option>`).join("")
       }</select></div>
