@@ -106,6 +106,31 @@
   details summary{font-size:12px;color:var(--tx3);cursor:pointer}
   details div{font-size:12px;color:var(--tx2);line-height:1.75;padding-top:6px}
   .foot{text-align:center;font-size:11px;color:var(--tx3);padding:0 16px 10px}
+
+  /* ===== 浮動加配件按鈕 + 材料庫抽屜 ===== */
+  #fab{position:fixed;right:14px;z-index:57;
+       bottom:calc(64px + env(safe-area-inset-bottom));
+       background:var(--ac);color:#04222b;border:none;border-radius:24px;
+       padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;
+       box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  #fab:active{transform:scale(.96)}
+  #matback{position:fixed;inset:0;background:rgba(8,11,15,.5);z-index:63;display:none;animation:fade .15s ease}
+  #matsheet{position:fixed;left:0;right:0;bottom:0;z-index:64;background:var(--bg2);
+            border-top:1px solid var(--ac);border-radius:14px 14px 0 0;
+            padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+            box-shadow:0 -10px 34px rgba(0,0,0,.6);
+            transform:translateY(112%);transition:transform .22s ease;
+            max-height:68vh;overflow:auto}
+  #matsheet.open{transform:none}
+  .mshead{display:flex;align-items:center;font-size:12px;color:var(--ac);letter-spacing:1px;margin-bottom:4px}
+  .mshead .btn{margin-left:auto}
+  .mshint{font-size:11.5px;color:var(--tx3);line-height:1.55;margin-top:8px}
+  #toast{position:fixed;left:50%;bottom:calc(120px + env(safe-area-inset-bottom));
+         transform:translateX(-50%) translateY(8px);
+         background:var(--ac);color:#04222b;font-weight:700;font-size:13px;
+         padding:7px 14px;border-radius:20px;z-index:80;opacity:0;pointer-events:none;
+         transition:opacity .18s,transform .18s;box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
@@ -118,7 +143,7 @@
 
   <!-- 線組 -->
   <div class="card">
-    <h2>線組 <span class="tag">點下方材料即加入</span></h2>
+    <h2>線組 <span class="tag">點右下 ＋ 加配件</span></h2>
     <div id="scene">
       <div id="water"></div><div id="wlabel"></div><div id="cord"></div>
       <div class="band" data-b="1"><div class="bl">浮標以上<br>（水面上）</div><div class="cs"></div></div>
@@ -133,13 +158,6 @@
       <div class="band" data-b="3"><div class="bl">天秤以下</div><div class="cs"></div></div>
     </div>
     <div id="editWrap"></div>
-  </div>
-
-  <!-- 材料庫 -->
-  <div class="card">
-    <h2>材料庫</h2>
-    <div id="palette"></div>
-    <div class="hint" style="margin-top:8px">手機上直接「點」材料就會加到線組，不用拖。再點線組上的配件，就能改重量、數量、<b style="color:var(--ac)">位置</b>、暫時取下或移除。同樣東西再點一次＝數量 +1。（想拖也可以）</div>
   </div>
 
   <!-- 浮標設定 -->
@@ -180,6 +198,17 @@
   </details>
   <div class="foot">重量是常見概值，用電子秤實測後改掉會更準。</div>
 </div>
+
+<button id="fab">＋ 加配件</button>
+
+<div id="matback"></div>
+<div id="matsheet">
+  <div class="mshead">材料庫<button class="btn g" id="matDone">完成</button></div>
+  <div id="palette"></div>
+  <div class="mshint">點材料即加入線組（放到預設位置）。加完後點線組上的配件，可改重量、數量、<b style="color:var(--ac)">位置</b>、暫時取下或移除。同樣東西再點一次＝數量 +1。（想拖也可以）</div>
+</div>
+
+<div id="toast"></div>
 
 <div id="bar">
   <div class="dot" id="bDot"></div>
@@ -261,6 +290,7 @@ function render(){
   paintBands();
   buildEdit();
   calc();
+  updateFab();
 }
 function chip(i){
   const el=document.createElement("div");
@@ -437,8 +467,8 @@ function endDrag(e){
   const z=moved?hit(t.clientX,t.clientY,zones()):null;
   drag=null;
   if(p.kind==="new"){
-    if(!moved){ add(p.name); render(); }              // 點一下＝放到預設位置
-    else if(z){ add(p.name,z.b); render(); }
+    if(!moved){ add(p.name); render(); if(matOpen) toast("已加入 "+p.name); }   // 點一下＝放到預設位置
+    else if(z){ add(p.name,z.b); render(); if(matOpen) toast("已加入 "+p.name); }
   }else{
     const it=items.find(x=>x.id===p.id); if(!it)return;
     if(!moved){ sel=(sel===it.id?null:it.id); render(); }
@@ -490,6 +520,19 @@ $("#copyBtn").onclick=()=>{
   const b=$("#copyBtn"),o=b.textContent;
   if(navigator.clipboard?.writeText) navigator.clipboard.writeText(t).then(()=>{b.textContent="已複製";setTimeout(()=>b.textContent=o,1200);},()=>{});
 };
+/* 材料庫底部抽屜 + 浮動按鈕 + 提示 */
+let matOpen=false, toastT=null;
+function updateFab(){ $("#fab").style.display=(matOpen||sel)?"none":"block"; }
+function openMat(){ matOpen=true; $("#matsheet").classList.add("open"); $("#matback").style.display="block"; updateFab(); }
+function closeMat(){ matOpen=false; $("#matsheet").classList.remove("open"); $("#matback").style.display="none"; updateFab(); }
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  if(toastT)clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),1100);
+}
+$("#fab").onclick=openMat;
+$("#matDone").onclick=closeMat;
+$("#matback").addEventListener("pointerdown",closeMat);
+
 window.addEventListener("resize",()=>calc());
 reset();
 })();
