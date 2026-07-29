@@ -259,6 +259,7 @@ const PAL=[
   ["插在標上","螢光棒",  0.350,0.90,0,5],
   ["插在標上","電子燈",  1.500,1.60,0,6],
   ["天秤以上","下目印",  0.020,1.20,2,20],
+  ["天秤以上","浮力目印",0.000,0.15,2,21],
   ["天秤以上","快別",    0.150,7.90,2,22],
   ["天秤以上","八字環",  0.120,7.90,2,24],
   ["天秤以上","夾鉛",    0.200,11.34,2,26],
@@ -274,14 +275,23 @@ const DEFAULT=[["上目印",1],["浮標座",1],["下目印",1],["快別",1],["�
                ["天秤",1],["精靈環",2],["子線",2],["蝦鉤",2],["餌",2]];
 // 預設不計入重量計算的項目（可在編輯面板一鍵切回計重）
 const NOCOUNT=new Set(["餌","子線"]);
+// 有號數/尺寸表的配件：prop=尺寸決定的欄位(w=單件重 / lift=浮力), def=預設索引(釣蝦常用)
+const SIZES={
+  "八字環":  {prop:"w",   def:4, opts:[["#6",0.200],["#7",0.150],["#8",0.115],["#10",0.075],["#12",0.055],["#14",0.038]]},
+  "浮力目印":{prop:"lift", def:2, opts:[["小小",0.05],["小",0.10],["中",0.15],["大",0.16]]}
+};
 
 let uid=1, items=[], sel=null;
 const P=n=>PAL.find(p=>p[1]===n);
 function add(name,band,q){
   const p=P(name);
-  const ex=items.find(i=>i.n===name&&i.b===(band!==undefined?band:p[4]));
+  const bnd=band!==undefined?band:p[4];
+  const ex=items.find(i=>i.n===name&&i.b===bnd);
   if(ex){ ex.q+=(q||1); return; }
-  items.push({id:uid++,n:name,w:p[2],s:p[3],b:band!==undefined?band:p[4],r:p[5],q:q||1,on:true,count:!NOCOUNT.has(name)});
+  const it={id:uid++,n:name,w:p[2],s:p[3],b:bnd,r:p[5],q:q||1,on:true,count:!NOCOUNT.has(name)};
+  const sz=SIZES[name];
+  if(sz){ const o=sz.opts[sz.def]; it.size=o[0]; it[sz.prop]=o[1]; }  // 帶入釣蝦預設號數/浮力
+  items.push(it);
 }
 function reset(){ items=[];uid=1;sel=null; DEFAULT.forEach(d=>add(d[0],undefined,d[1])); render(); }
 
@@ -292,12 +302,13 @@ function model(){
   const per=Math.PI*Math.pow(N($("#tD").value)/2,2)*N($("#tL").value)/1000;
   let air=0,sink=0;
   items.forEach(i=>{ if(!i.on||i.count===false)return;
+    if(i.lift!=null){ if(i.b!==0) sink+=-i.lift*i.q; return; }   // 浮力件：水下提供向上浮力（負配重）
     if(i.b===0) air+=i.w*i.q; else sink+=i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q; });
   const lift=lift0-air;
   const exposed=per>0?marks-(sink-lift)/per:0;
   return {fen,lift0,air,lift,marks,per,total:lift+per*marks,sink,exposed};
 }
-const effOf=i=> i.b===0 ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q);
+const effOf=i=> i.lift!=null ? (i.b===0?0:-i.lift*i.q) : (i.b===0 ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q));
 
 /* ---------- 畫面 ---------- */
 function paintBands(){
@@ -322,7 +333,7 @@ function chip(i){
   const el=document.createElement("div");
   el.className="chip"+(i.on?"":" off")+(i.count===false?" nocount":"")+(sel===i.id?" sel":"")+(i.count!==false&&effOf(i)<0?" neg":"");
   el.dataset.id=i.id;
-  el.innerHTML=`<span>${esc(i.n)}</span>${i.q>1?`<span class="q">×${i.q}</span>`:""}<span class="e"></span>`;
+  el.innerHTML=`<span>${esc(i.n)}${i.size?" "+esc(i.size):""}</span>${i.q>1?`<span class="q">×${i.q}</span>`:""}<span class="e"></span>`;
   return el;
 }
 const BANDS=[[0,"插在標上"],[1,"浮標以上"],[2,"天秤以上"],[3,"天秤以下"]];
@@ -338,34 +349,42 @@ function buildEdit(){
   if(!it){ w.innerHTML=""; if(bd)bd.remove(); return; }
   if(!bd){ bd=document.createElement("div"); bd.id="backdrop";
     bd.addEventListener("pointerdown",()=>{sel=null;render();}); document.body.appendChild(bd); }
+  const sz=SIZES[it.n], isLift=it.lift!=null;
   w.innerHTML=`
     <div id="edit">
-      <div class="t">${esc(it.n)}<span>${it.on?"":"已取下"}</span></div>
-      <div class="row r2" style="margin-bottom:8px">
+      <div class="t">${esc(it.n)}${it.size?" "+esc(it.size):""}<span>${it.on?"":"已取下"}</span></div>
+      ${isLift
+        ? `<div style="margin-bottom:8px"><label>浮力 (g，向上)</label><input type="number" inputmode="decimal" step="0.01" id="eLift" value="${it.lift}"></div>`
+        : `<div class="row r2" style="margin-bottom:8px">
         <div><label>單件重 (g)</label><input type="number" inputmode="decimal" step="0.005" id="eW" value="${it.w}"></div>
         <div><label>材質</label><select id="eS">${
           MAT.map(m=>`<option value="${m[1]}"${Math.abs(m[1]-it.s)<1e-9?" selected":""}>${m[0]} ${m[1]}</option>`).join("")
           +(MAT.some(m=>Math.abs(m[1]-it.s)<1e-9)?"":`<option value="${it.s}" selected>比重 ${it.s}</option>`)
         }</select></div>
-      </div>
+      </div>`}
       <div style="margin-bottom:8px"><label>數量</label>
         <div class="stp" data-step="1" data-min="1" data-dec="0">
           <button class="sbtn" data-d="-">−</button><input id="eQ" inputmode="numeric" value="${it.q}" readonly><button class="sbtn" data-d="+">＋</button>
         </div></div>
+      ${sz ? `<div style="margin-bottom:8px"><label>尺寸／號數</label><select id="eSize">${
+        sz.opts.map((o,idx)=>`<option value="${idx}"${o[0]===it.size?" selected":""}>${o[0]}（${o[1]}g）</option>`).join("")
+      }</select></div>` : ""}
       <div style="margin-bottom:8px"><label>位置</label><select id="eB">${
         BANDS.map(b=>`<option value="${b[0]}"${b[0]===it.b?" selected":""}>${b[1]}</option>`).join("")
       }</select></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" id="eCount">${it.count===false?"改為計重":"設為不計重"}</button>
+        ${isLift ? "" : `<button class="btn" id="eCount">${it.count===false?"改為計重":"設為不計重"}</button>`}
         <button class="btn" id="eOn">${it.on?"暫時取下":"裝回去"}</button>
         <button class="btn" id="eDel" style="color:var(--bad)">移除</button>
         <button class="btn g" id="eClose" style="margin-left:auto">收起</button>
       </div>
     </div>`;
-  $("#eW").oninput=e=>{it.w=N(e.target.value);calc();};
+  const eW=$("#eW"); if(eW) eW.oninput=e=>{it.w=N(e.target.value);calc();};
   $("#eQ").oninput=e=>{it.q=Math.max(1,Math.round(N(e.target.value)));render();};
-  $("#eS").onchange=e=>{it.s=N(e.target.value);calc();};
-  $("#eCount").onclick=()=>{it.count=(it.count===false);render();};
+  const eS=$("#eS"); if(eS) eS.onchange=e=>{it.s=N(e.target.value);calc();};
+  const eLift=$("#eLift"); if(eLift) eLift.oninput=e=>{it.lift=N(e.target.value);calc();};
+  const eSize=$("#eSize"); if(eSize) eSize.onchange=e=>{const o=SIZES[it.n].opts[+e.target.value];it.size=o[0];it[SIZES[it.n].prop]=o[1];render();};
+  const eCount=$("#eCount"); if(eCount) eCount.onclick=()=>{it.count=(it.count===false);render();};
   $("#eB").onchange=e=>{moveBand(it,+e.target.value);render();};
   $("#eOn").onclick=()=>{it.on=!it.on;render();};
   $("#eDel").onclick=()=>{items=items.filter(x=>x!==it);sel=null;render();};
@@ -420,7 +439,9 @@ function calc(){
   $$(".chip").forEach(c=>{
     const i=items.find(x=>String(x.id)===c.dataset.id); if(!i)return;
     const e=c.querySelector(".e"); const v=effOf(i);
-    e.textContent = i.count===false ? "不計" : (i.b===0 ? "壓標 "+f(v,2)+"g" : (v<0?"−":"")+f(Math.abs(v),3)+"g");
+    e.textContent = i.count===false ? "不計"
+      : (i.lift!=null ? "浮 "+f(i.lift*i.q,3)+"g"
+      : (i.b===0 ? "壓標 "+f(v,2)+"g" : (v<0?"−":"")+f(Math.abs(v),3)+"g"));
   });
 
   const shown=Math.max(0,Math.min(m.marks,m.exposed)), res=shown*m.per;
@@ -528,7 +549,11 @@ const pal=$("#palette");
   const box=document.createElement("div"); box.className="pal";
   PAL.filter(p=>p[0]===sec).forEach(p=>{
     const c=document.createElement("div"); c.className="pchip";
-    c.innerHTML=`${esc(p[1])} <small>${f(p[2],3)}g</small>`;
+    const szp=SIZES[p[1]];
+    const sub = szp&&szp.prop==="lift" ? "浮 "+f(szp.opts[szp.def][1],2)+"g"
+              : szp ? szp.opts[szp.def][0]
+              : f(p[2],3)+"g";
+    c.innerHTML=`${esc(p[1])} <small>${sub}</small>`;
     c.addEventListener("pointerdown",e=>startDrag(e,{kind:"new",name:p[1]}));
     box.appendChild(c);
   });
@@ -569,7 +594,11 @@ $("#copyBtn").onclick=()=>{
   let t="【釣蝦線組】\n浮標 "+f(m.fen,1)+" 分（"+f(m.lift0,3)+" g）／"+m.marks+" 目・每目 "+f(m.per,3)+" g\n";
   ["插在標上","浮標以上","天秤以上","天秤以下"].forEach((lab,k)=>{
     const l=items.filter(i=>i.on&&i.b===k).sort((a,c)=>a.r-c.r);
-    if(l.length) t+=lab+"：\n"+l.map(i=>"  ・"+i.n+" "+f(i.w,3)+"g ×"+i.q+(i.count===false?"（不計）":" → "+f(effOf(i),3)+"g")).join("\n")+"\n";
+    if(l.length) t+=lab+"：\n"+l.map(i=>{
+      const nm=i.n+(i.size?" "+i.size:"");
+      if(i.lift!=null) return "  ・"+nm+" 浮"+f(i.lift,3)+"g ×"+i.q+(i.count===false?"（不計）":" → -"+f(i.lift*i.q,3)+"g");
+      return "  ・"+nm+" "+f(i.w,3)+"g ×"+i.q+(i.count===false?"（不計）":" → "+f(effOf(i),3)+"g");
+    }).join("\n")+"\n";
   });
   t+="水中總配重 "+f(m.sink,3)+" g\n露出 "+f(m.exposed,1)+" 目・殘餘浮力 "+f(Math.max(0,Math.min(m.marks,m.exposed))*m.per,3)+" g";
   const b=$("#copyBtn"),o=b.textContent;
