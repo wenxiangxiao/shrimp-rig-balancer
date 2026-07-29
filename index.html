@@ -206,7 +206,7 @@
 <div id="matsheet">
   <div class="mshead">材料庫<button class="btn g" id="matDone">完成</button></div>
   <div id="palette"></div>
-  <div class="mshint">點材料即加入線組（放到預設位置）。加完後點線組上的配件，可改重量、數量、<b style="color:var(--ac)">位置</b>、暫時取下或移除。同樣東西再點一次＝數量 +1。（想拖也可以）</div>
+  <div class="mshint"><b style="color:var(--ac)">按住材料拖到線組上的對應位置</b>放開，就加到那一段。加完後點線組上的配件，可改重量、數量、位置、暫時取下或移除。</div>
 </div>
 
 <div id="toast"></div>
@@ -244,11 +244,10 @@ const PAL=[
   ["天秤以下","O環",     0.010,1.20,3,33],
   ["天秤以下","子線",    0.020,1.14,3,34],
   ["天秤以下","蝦鉤",    0.060,7.90,3,36],
-  ["天秤以下","蝦耳",    0.050,1.20,3,38],
-  ["天秤以下","蝦餌",    0.400,1.05,3,40]
+  ["天秤以下","餌",      0.400,1.05,3,40]
 ];
 const DEFAULT=[["上目印",1],["太空豆",4],["浮標座",1],["下目印",1],["快別",1],["八字環",1],
-               ["夾鉛",3],["天秤",1],["精靈環",1],["子線",1],["蝦鉤",1],["蝦耳",1],["蝦餌",1]];
+               ["天秤",1],["精靈環",2],["子線",2],["蝦鉤",2],["餌",2]];
 
 let uid=1, items=[], sel=null;
 const P=n=>PAL.find(p=>p[1]===n);
@@ -450,7 +449,12 @@ function startDrag(e,payload){
 function moveDrag(e){
   if(!drag)return;
   const t=e.touches?e.touches[0]:e;
-  if(Math.abs(t.clientX-drag.x)>6||Math.abs(t.clientY-drag.y)>6) drag.moved=true;
+  if(!drag.moved && (Math.abs(t.clientX-drag.x)>6||Math.abs(t.clientY-drag.y)>6)){
+    drag.moved=true;
+    if(drag.payload.kind==="new" && matOpen){   // 拖出材料庫時收起抽屜，露出線組讓你放到位置
+      $("#matsheet").classList.remove("open"); $("#matback").style.display="none"; drag.hidSheet=true;
+    }
+  }
   if(!drag.moved)return;
   e.preventDefault();
   const g=$("#ghost"); if(g){g.style.left=t.clientX+"px";g.style.top=t.clientY+"px";}
@@ -464,12 +468,13 @@ function endDrag(e){
   const t=e.changedTouches?e.changedTouches[0]:e;
   const g=$("#ghost"); if(g)g.remove();
   clearHot();
-  const p=drag.payload, moved=drag.moved;
+  const p=drag.payload, moved=drag.moved, hidSheet=drag.hidSheet;
   const z=moved?hit(t.clientX,t.clientY,zones()):null;
   drag=null;
+  if(hidSheet && matOpen){ $("#matsheet").classList.add("open"); $("#matback").style.display="block"; }  // 放開後抽屜回來
   if(p.kind==="new"){
-    if(!moved){ add(p.name); render(); if(matOpen) toast("已加入 "+p.name); }   // 點一下＝放到預設位置
-    else if(z){ add(p.name,z.b); render(); if(matOpen) toast("已加入 "+p.name); }
+    if(!moved){ if(matOpen) toast("把材料拖到線組上的位置放開"); }   // 純點擊：提示改用拖曳
+    else if(z){ add(p.name,z.b); render(); const bn=(BANDS.find(x=>x[0]===z.b)||[0,""])[1]; toast("已加入 "+p.name+"　→ "+bn); }
   }else{
     const it=items.find(x=>x.id===p.id); if(!it)return;
     if(!moved){ sel=(sel===it.id?null:it.id); render(); }
