@@ -131,6 +131,18 @@
          padding:7px 14px;border-radius:20px;z-index:80;opacity:0;pointer-events:none;
          transition:opacity .18s,transform .18s;box-shadow:0 6px 18px rgba(0,0,0,.5)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ===== 加減步進器 ===== */
+  .stp{display:flex;align-items:stretch;background:var(--bg3);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .stp:focus-within{border-color:var(--ac)}
+  .stp input{border:none!important;background:none;text-align:center;flex:1;min-width:0;border-radius:0;padding:8px 2px;color:var(--tx)}
+  .stp .sbtn{border:none;background:var(--bg2);color:var(--ac);font-size:19px;font-weight:700;
+             width:42px;flex:none;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center}
+  .stp .sbtn:active{background:var(--ac);color:#04222b}
+
+  /* 不計重的配件 */
+  .chip.nocount{opacity:.62;border-style:dashed}
+  .chip.nocount .e{color:var(--tx3)!important}
 </style>
 </head>
 <body>
@@ -165,9 +177,18 @@
   <div class="card">
     <h2>浮標 <span class="tag" id="fTag"></span></h2>
     <div class="row r3" style="margin-bottom:8px">
-      <div><label>浮力（分）</label><input type="number" id="fen" step="0.1" value="3.8"></div>
-      <div><label>標尾目數</label><input type="number" id="marks" step="1" value="8"></div>
-      <div><label>每目長 (mm)</label><input type="number" id="tL" step="1" value="15"></div>
+      <div><label>浮力（分）</label>
+        <div class="stp" data-step="0.1" data-min="0.1" data-dec="1">
+          <button class="sbtn" data-d="-">−</button><input id="fen" inputmode="decimal" value="3" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
+      <div><label>標尾目數</label>
+        <div class="stp" data-step="1" data-min="0" data-dec="0">
+          <button class="sbtn" data-d="-">−</button><input id="marks" inputmode="numeric" value="8" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
+      <div><label>每目長 (mm)</label>
+        <div class="stp" data-step="1" data-min="1" data-dec="0">
+          <button class="sbtn" data-d="-">−</button><input id="tL" inputmode="numeric" value="15" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
     </div>
     <div><label>標尾粗細</label>
       <select id="tD">
@@ -183,7 +204,10 @@
   <div class="card">
     <h2>調目</h2>
     <div class="row r2" style="margin-bottom:9px">
-      <div><label>想露出幾目</label><input type="number" id="target" step="0.5" value="2"></div>
+      <div><label>想露出幾目</label>
+        <div class="stp" data-step="0.5" data-min="0" data-dec="1">
+          <button class="sbtn" data-d="-">−</button><input id="target" inputmode="decimal" value="2" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
       <div style="display:flex;align-items:flex-end"><button class="btn" id="copyBtn" style="width:100%">複製摘要</button></div>
     </div>
     <div class="status" id="tune"></div>
@@ -246,8 +270,10 @@ const PAL=[
   ["天秤以下","蝦鉤",    0.060,7.90,3,36],
   ["天秤以下","餌",      0.400,1.05,3,40]
 ];
-const DEFAULT=[["上目印",1],["太空豆",4],["浮標座",1],["下目印",1],["快別",1],["八字環",1],
+const DEFAULT=[["上目印",1],["浮標座",1],["下目印",1],["快別",1],["八字環",1],
                ["天秤",1],["精靈環",2],["子線",2],["蝦鉤",2],["餌",2]];
+// 預設不計入重量計算的項目（可在編輯面板一鍵切回計重）
+const NOCOUNT=new Set(["餌","子線"]);
 
 let uid=1, items=[], sel=null;
 const P=n=>PAL.find(p=>p[1]===n);
@@ -255,7 +281,7 @@ function add(name,band,q){
   const p=P(name);
   const ex=items.find(i=>i.n===name&&i.b===(band!==undefined?band:p[4]));
   if(ex){ ex.q+=(q||1); return; }
-  items.push({id:uid++,n:name,w:p[2],s:p[3],b:band!==undefined?band:p[4],r:p[5],q:q||1,on:true});
+  items.push({id:uid++,n:name,w:p[2],s:p[3],b:band!==undefined?band:p[4],r:p[5],q:q||1,on:true,count:!NOCOUNT.has(name)});
 }
 function reset(){ items=[];uid=1;sel=null; DEFAULT.forEach(d=>add(d[0],undefined,d[1])); render(); }
 
@@ -265,7 +291,7 @@ function model(){
   const marks=Math.max(0,Math.round(N($("#marks").value)));
   const per=Math.PI*Math.pow(N($("#tD").value)/2,2)*N($("#tL").value)/1000;
   let air=0,sink=0;
-  items.forEach(i=>{ if(!i.on)return;
+  items.forEach(i=>{ if(!i.on||i.count===false)return;
     if(i.b===0) air+=i.w*i.q; else sink+=i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q; });
   const lift=lift0-air;
   const exposed=per>0?marks-(sink-lift)/per:0;
@@ -294,7 +320,7 @@ function render(){
 }
 function chip(i){
   const el=document.createElement("div");
-  el.className="chip"+(i.on?"":" off")+(sel===i.id?" sel":"")+(effOf(i)<0?" neg":"");
+  el.className="chip"+(i.on?"":" off")+(i.count===false?" nocount":"")+(sel===i.id?" sel":"")+(i.count!==false&&effOf(i)<0?" neg":"");
   el.dataset.id=i.id;
   el.innerHTML=`<span>${esc(i.n)}</span>${i.q>1?`<span class="q">×${i.q}</span>`:""}<span class="e"></span>`;
   return el;
@@ -316,8 +342,11 @@ function buildEdit(){
     <div id="edit">
       <div class="t">${esc(it.n)}<span>${it.on?"":"已取下"}</span></div>
       <div class="row r3" style="margin-bottom:8px">
-        <div><label>單件重 (g)</label><input type="number" step="0.005" id="eW" value="${it.w}"></div>
-        <div><label>數量</label><input type="number" step="1" id="eQ" value="${it.q}"></div>
+        <div><label>單件重 (g)</label><input type="number" inputmode="decimal" step="0.005" id="eW" value="${it.w}"></div>
+        <div><label>數量</label>
+          <div class="stp" data-step="1" data-min="1" data-dec="0">
+            <button class="sbtn" data-d="-">−</button><input id="eQ" inputmode="numeric" value="${it.q}" readonly><button class="sbtn" data-d="+">＋</button>
+          </div></div>
         <div><label>材質</label><select id="eS">${
           MAT.map(m=>`<option value="${m[1]}"${Math.abs(m[1]-it.s)<1e-9?" selected":""}>${m[0]} ${m[1]}</option>`).join("")
           +(MAT.some(m=>Math.abs(m[1]-it.s)<1e-9)?"":`<option value="${it.s}" selected>比重 ${it.s}</option>`)
@@ -326,15 +355,17 @@ function buildEdit(){
       <div style="margin-bottom:8px"><label>位置</label><select id="eB">${
         BANDS.map(b=>`<option value="${b[0]}"${b[0]===it.b?" selected":""}>${b[1]}</option>`).join("")
       }</select></div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="eCount">${it.count===false?"改為計重":"設為不計重"}</button>
         <button class="btn" id="eOn">${it.on?"暫時取下":"裝回去"}</button>
         <button class="btn" id="eDel" style="color:var(--bad)">移除</button>
         <button class="btn g" id="eClose" style="margin-left:auto">收起</button>
       </div>
     </div>`;
   $("#eW").oninput=e=>{it.w=N(e.target.value);calc();};
-  $("#eQ").oninput=e=>{it.q=Math.max(1,Math.round(N(e.target.value)));paintBands();calc();};
+  $("#eQ").oninput=e=>{it.q=Math.max(1,Math.round(N(e.target.value)));render();};
   $("#eS").onchange=e=>{it.s=N(e.target.value);calc();};
+  $("#eCount").onclick=()=>{it.count=(it.count===false);render();};
   $("#eB").onchange=e=>{moveBand(it,+e.target.value);render();};
   $("#eOn").onclick=()=>{it.on=!it.on;render();};
   $("#eDel").onclick=()=>{items=items.filter(x=>x!==it);sel=null;render();};
@@ -389,7 +420,7 @@ function calc(){
   $$(".chip").forEach(c=>{
     const i=items.find(x=>String(x.id)===c.dataset.id); if(!i)return;
     const e=c.querySelector(".e"); const v=effOf(i);
-    e.textContent = i.b===0 ? "壓標 "+f(v,2)+"g" : (v<0?"−":"")+f(Math.abs(v),3)+"g";
+    e.textContent = i.count===false ? "不計" : (i.b===0 ? "壓標 "+f(v,2)+"g" : (v<0?"−":"")+f(Math.abs(v),3)+"g");
   });
 
   const shown=Math.max(0,Math.min(m.marks,m.exposed)), res=shown*m.per;
@@ -514,6 +545,19 @@ $("#fsvg").onclick=()=>{ $("#fen").focus(); $("#fen").scrollIntoView({block:"cen
   const e=document.getElementById(id);
   e.addEventListener("input",calc); e.addEventListener("change",calc);
 });
+// 步進器 −／＋（不用叫鍵盤）
+document.addEventListener("click",e=>{
+  const btn=e.target.closest(".sbtn"); if(!btn)return;
+  const wrap=btn.closest(".stp"); if(!wrap)return;
+  const inp=wrap.querySelector("input"); if(!inp)return;
+  const step=parseFloat(wrap.dataset.step)||1;
+  const dec=parseInt(wrap.dataset.dec||"0",10);
+  const min=wrap.dataset.min!==undefined?parseFloat(wrap.dataset.min):-Infinity;
+  let v=(parseFloat(inp.value)||0)+(btn.dataset.d==="+"?step:-step);
+  if(v<min)v=min;
+  inp.value=v.toFixed(dec);
+  inp.dispatchEvent(new Event("input",{bubbles:true}));
+});
 $("#resetBtn").onclick=reset;
 // 強制略過快取抓最新版本（加到主畫面的精簡瀏覽器沒有重整鍵）
 $("#updBtn").onclick=()=>{
@@ -525,7 +569,7 @@ $("#copyBtn").onclick=()=>{
   let t="【釣蝦線組】\n浮標 "+f(m.fen,1)+" 分（"+f(m.lift0,3)+" g）／"+m.marks+" 目・每目 "+f(m.per,3)+" g\n";
   ["插在標上","浮標以上","天秤以上","天秤以下"].forEach((lab,k)=>{
     const l=items.filter(i=>i.on&&i.b===k).sort((a,c)=>a.r-c.r);
-    if(l.length) t+=lab+"：\n"+l.map(i=>"  ・"+i.n+" "+f(i.w,3)+"g ×"+i.q+" → "+f(effOf(i),3)+"g").join("\n")+"\n";
+    if(l.length) t+=lab+"：\n"+l.map(i=>"  ・"+i.n+" "+f(i.w,3)+"g ×"+i.q+(i.count===false?"（不計）":" → "+f(effOf(i),3)+"g")).join("\n")+"\n";
   });
   t+="水中總配重 "+f(m.sink,3)+" g\n露出 "+f(m.exposed,1)+" 目・殘餘浮力 "+f(Math.max(0,Math.min(m.marks,m.exposed))*m.per,3)+" g";
   const b=$("#copyBtn"),o=b.textContent;
