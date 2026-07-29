@@ -136,6 +136,7 @@
 <body>
 <header>
   <h1>🦐 釣蝦線組配重台</h1>
+  <button class="btn g" id="updBtn">↻ 更新</button>
   <button class="btn g" id="resetBtn">重設</button>
 </header>
 
@@ -509,6 +510,11 @@ $("#fsvg").onclick=()=>{ $("#fen").focus(); $("#fen").scrollIntoView({block:"cen
   e.addEventListener("input",calc); e.addEventListener("change",calc);
 });
 $("#resetBtn").onclick=reset;
+// 強制略過快取抓最新版本（加到主畫面的精簡瀏覽器沒有重整鍵）
+$("#updBtn").onclick=()=>{
+  const base=location.href.split("?")[0].split("#")[0];
+  location.replace(base+"?t="+Date.now());
+};
 $("#copyBtn").onclick=()=>{
   const m=model();
   let t="【釣蝦線組】\n浮標 "+f(m.fen,1)+" 分（"+f(m.lift0,3)+" g）／"+m.marks+" 目・每目 "+f(m.per,3)+" g\n";
