@@ -458,7 +458,10 @@ function paintWater(m,fg){
   const tailTopY=fTop+fg.tailTop;
   let wy;
   // 露出的目數在水面之上 → 水位 = 標尾頂端 + 露出目數
-  if(m.marks<=0) wy=tailTopY+fg.bodyH*0.45;       // 阿波：水面在標身中段
+  if(m.marks<=0){                                   // 阿波：吃水深度隨殘餘浮力
+    const frac=m.lift0>0?Math.max(-0.35,Math.min(1,m.residual/m.lift0)):0;
+    wy=tailTopY+frac*fg.bodyH;                       // 1=浮高(水在球底) 0=快滅頂(水在球頂) <0=滅頂
+  }
   else if(m.per<=0) wy=tailTopY+fg.tailH;
   else wy=tailTopY+Math.max(-16,Math.min(fg.tailH+fg.bodyH*0.7,m.exposed*fg.mh));
   const sH=scene.offsetHeight;
