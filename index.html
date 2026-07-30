@@ -214,13 +214,23 @@
           <button class="sbtn" data-d="-">−</button><input id="tL" inputmode="numeric" value="15" readonly><button class="sbtn" data-d="+">＋</button>
         </div></div>
     </div>
-    <div id="fldTD"><label>標尾粗細</label>
-      <select id="tD">
-        <option value="1.2">細尾 1.2 mm</option>
-        <option value="2.0" selected>一般 2.0 mm</option>
-        <option value="2.5">粗尾 2.5 mm</option>
-        <option value="3.0">電子／夜光尾 3.0 mm</option>
-      </select>
+    <div class="row r2">
+      <div id="fldTD"><label>標尾粗細</label>
+        <select id="tD">
+          <option value="1.2">細尾 1.2 mm</option>
+          <option value="2.0" selected>一般 2.0 mm</option>
+          <option value="2.5">粗尾 2.5 mm</option>
+          <option value="3.0">電子／夜光尾 3.0 mm</option>
+        </select>
+      </div>
+      <div id="fldShape"><label>阿波外型</label>
+        <select id="shape">
+          <option value="圓型">圓型</option>
+          <option value="紡錘型" selected>紡錘型</option>
+          <option value="細長型">細長型</option>
+          <option value="上寬下細">上寬下細</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -436,17 +446,26 @@ function buildEdit(){
 }
 
 /* ---------- 浮標 + 水位 ---------- */
+// 阿波外型（無標尾時可換）：h=標身高度, el(x,top,h)=SVG 元素
+const BF='fill="#2a3a4d" stroke="#5a6c82" stroke-width="1.5"';
+const SHAPES={
+  "圓型":    {h:40, el:(x,t,h)=>`<ellipse cx="${x}" cy="${t+h/2}" rx="19" ry="${h/2}" ${BF}/>`},
+  "紡錘型":  {h:72, el:(x,t,h)=>`<path d="M${x} ${t} C ${x-17} ${t+h*.3}, ${x-17} ${t+h*.75}, ${x} ${t+h} C ${x+17} ${t+h*.75}, ${x+17} ${t+h*.3}, ${x} ${t} Z" ${BF}/>`},
+  "細長型":  {h:98, el:(x,t,h)=>`<path d="M${x} ${t} C ${x-8} ${t+h*.14}, ${x-8} ${t+h*.86}, ${x} ${t+h} C ${x+8} ${t+h*.86}, ${x+8} ${t+h*.14}, ${x} ${t} Z" ${BF}/>`},
+  "上寬下細":{h:64, el:(x,t,h)=>`<path d="M${x-19} ${t+h*.25} C ${x-19} ${t+h*.05}, ${x+19} ${t+h*.05}, ${x+19} ${t+h*.25} C ${x+16} ${t+h*.6}, ${x+5} ${t+h*.95}, ${x} ${t+h} C ${x-5} ${t+h*.95}, ${x-16} ${t+h*.6}, ${x-19} ${t+h*.25} Z" ${BF}/>`}
+};
 function drawFloat(m){
   const svg=$("#fsvg"), aba=m.marks<=0, marks=aba?0:Math.max(1,m.marks);
-  const mh=aba?0:Math.max(6,Math.min(11,88/marks)), tailH=mh*marks, bodyH=aba?72:56, H=tailH+bodyH+10;
+  const shape=aba?(SHAPES[$("#shape").value]?$("#shape").value:"紡錘型"):null;
+  const mh=aba?0:Math.max(6,Math.min(11,88/marks)), tailH=mh*marks, bodyH=aba?SHAPES[shape].h:56, H=tailH+bodyH+10;
   svg.setAttribute("height",H); svg.setAttribute("viewBox","0 0 46 "+H);
   let g="";
   for(let i=0;i<marks;i++)
     g+=`<rect x="19" y="${5+i*mh}" width="8" height="${mh-.8}" fill="${i%2?"#f7f2e8":"#f0685f"}" stroke="#141a22" stroke-width=".6" rx="1"/>`;
   const bt=5+tailH;
   g+=`<line x1="23" y1="5" x2="23" y2="0" stroke="#7d8b9c" stroke-width="2"/>`
-   +`<path d="M23 ${bt} C 6 ${bt+bodyH*.3}, 6 ${bt+bodyH*.75}, 23 ${bt+bodyH}
-       C 40 ${bt+bodyH*.75}, 40 ${bt+bodyH*.3}, 23 ${bt} Z" fill="#2a3a4d" stroke="#5a6c82" stroke-width="1.5"/>`;
+   +(aba ? SHAPES[shape].el(23,bt,bodyH)
+        : `<path d="M23 ${bt} C 6 ${bt+bodyH*.3}, 6 ${bt+bodyH*.75}, 23 ${bt+bodyH} C 40 ${bt+bodyH*.75}, 40 ${bt+bodyH*.3}, 23 ${bt} Z" ${BF}/>`);
   svg.innerHTML=g;
   document.querySelector('#fmeta').style.paddingTop=Math.max(6,tailH-14)+'px';
   return {mh,tailTop:5,tailH,bodyH,H};
@@ -477,6 +496,7 @@ function calc(){
   const m=model();
   $("#fldTL").classList.toggle("fld-off",m.aba);   // 阿波：標尾相關欄位停用
   $("#fldTD").classList.toggle("fld-off",m.aba);
+  $("#fldShape").classList.toggle("fld-off",!m.aba);   // 阿波外型：只有阿波時能選
   const fg=drawFloat(m);
   $("#fTag").textContent=f(m.lift,2)+" g 浮力";
   $("#fmeta").innerHTML=`浮力 <b>${f(m.lift0,3)} g</b><br>`
@@ -633,7 +653,7 @@ $("#scene").addEventListener("pointerdown",e=>{
 });
 $("#fsvg").onclick=()=>{ $("#fen").focus(); $("#fen").scrollIntoView({block:"center",behavior:"smooth"}); };
 
-["fen","marks","tL","tD","target"].forEach(id=>{
+["fen","marks","tL","tD","target","shape"].forEach(id=>{
   const e=document.getElementById(id);
   e.addEventListener("input",calc); e.addEventListener("change",calc);
 });
@@ -710,11 +730,12 @@ function askText(title,def){
 const LSK="shrimp_rigs_v1";
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LSK))||{}}catch(e){return {};} }
 function saveStore(o){ try{localStorage.setItem(LSK,JSON.stringify(o));return true;}catch(e){return false;} }
-function snapshot(){ return {fen:$("#fen").value,marks:$("#marks").value,tL:$("#tL").value,tD:$("#tD").value,target:$("#target").value,items:items.map(i=>({...i}))}; }
+function snapshot(){ return {fen:$("#fen").value,marks:$("#marks").value,tL:$("#tL").value,tD:$("#tD").value,target:$("#target").value,shape:$("#shape").value,items:items.map(i=>({...i}))}; }
 function restore(d){
   if(!d||!Array.isArray(d.items)) throw new Error("bad");
   if(d.fen!=null)$("#fen").value=d.fen; if(d.marks!=null)$("#marks").value=d.marks;
   if(d.tL!=null)$("#tL").value=d.tL; if(d.tD!=null)$("#tD").value=d.tD; if(d.target!=null)$("#target").value=d.target;
+  if(d.shape!=null)$("#shape").value=d.shape;
   items=d.items.map(i=>({...i}));
   uid=items.reduce((m,i)=>Math.max(m,i.id||0),0)+1;
   sel=null; render();
