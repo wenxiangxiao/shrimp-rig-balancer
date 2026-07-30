@@ -255,9 +255,10 @@ const MAT=[["鉛",11.34],["金屬",7.90],["塑膠",1.14],["矽膠",1.20],["發�
 const PAL=[
   ["浮標以上","上目印",  0.020,1.20,1,10],
   ["浮標以上","太空豆",  0.015,1.20,1,12],
-  ["浮標以上","浮標座",  0.200,1.14,1,14],
   ["插在標上","螢光棒",  0.350,0.90,0,5],
   ["插在標上","電子燈",  1.500,1.60,0,6],
+  ["天秤以上","浮標座",  0.200,1.14,2,18],
+  ["天秤以上","雞腸座",  0.050,1.14,2,19],
   ["天秤以上","下目印",  0.020,1.20,2,20],
   ["天秤以上","浮力目印",0.000,0.15,2,21],
   ["天秤以上","快別",    0.050,7.90,2,22],
@@ -265,8 +266,8 @@ const PAL=[
   ["天秤以上","夾鉛",    0.200,11.34,2,26],
   ["天秤以上","微調鉛",  0.050,11.34,2,27],
   ["天秤以下","天秤",    0.916,7.90,3,30],
-  ["天秤以下","精靈環",  0.040,7.90,3,32],
-  ["天秤以下","O環",     0.010,1.20,3,33],
+  ["天秤以下","精靈環",  0.028,7.90,3,32],
+  ["天秤以下","O環",     0.021,7.90,3,33],
   ["天秤以下","子線",    0.020,1.14,3,34],
   ["天秤以下","蝦鉤",    0.060,7.90,3,36],
   ["天秤以下","餌",      0.400,1.05,3,40]
@@ -274,7 +275,7 @@ const PAL=[
 const DEFAULT=[["上目印",1],["浮標座",1],["下目印",1],["快別",1],["八字環",1],
                ["天秤",1],["精靈環",2],["子線",2],["蝦鉤",2],["餌",2]];
 // 預設不計入重量計算的項目（可在編輯面板一鍵切回計重）
-const NOCOUNT=new Set(["餌","子線"]);
+const NOCOUNT=new Set(["餌","子線","雞腸座"]);
 // 有號數/尺寸表的配件：prop=尺寸決定的欄位(w=單件重 / lift=浮力), def=預設索引(釣蝦常用)
 const SIZES={
   "八字環":  {prop:"w",   def:4, opts:[["#6",0.200],["#7",0.150],["#8",0.115],["#10",0.075],["#12",0.055],["#14",0.038]]},
@@ -309,7 +310,8 @@ function model(){
     if(i.b===0) air+=i.w*i.q; else sink+=i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q; });
   const lift=lift0-air;
   const exposed=per>0?marks-(sink-lift)/per:0;
-  return {fen,lift0,air,lift,marks,per,total:lift+per*marks,sink,exposed};
+  const residual=lift-sink;   // 淨浮力（阿波無標尾時看這個）
+  return {fen,lift0,air,lift,marks,per,total:lift+per*marks,sink,exposed,residual,aba:marks<=0};
 }
 const effOf=i=> i.lift!=null ? (i.b===0?0:-i.lift*i.q) : (i.b===0 ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q));
 
@@ -397,8 +399,8 @@ function buildEdit(){
 
 /* ---------- 浮標 + 水位 ---------- */
 function drawFloat(m){
-  const svg=$("#fsvg"), marks=Math.max(1,m.marks);
-  const mh=Math.max(6,Math.min(11,88/marks)), tailH=mh*marks, bodyH=56, H=tailH+bodyH+10;
+  const svg=$("#fsvg"), aba=m.marks<=0, marks=aba?0:Math.max(1,m.marks);
+  const mh=aba?0:Math.max(6,Math.min(11,88/marks)), tailH=mh*marks, bodyH=aba?72:56, H=tailH+bodyH+10;
   svg.setAttribute("height",H); svg.setAttribute("viewBox","0 0 46 "+H);
   let g="";
   for(let i=0;i<marks;i++)
@@ -418,7 +420,8 @@ function paintWater(m,fg){
   const tailTopY=fTop+fg.tailTop;
   let wy;
   // 露出的目數在水面之上 → 水位 = 標尾頂端 + 露出目數
-  if(m.per<=0||m.marks<=0) wy=tailTopY+fg.tailH;
+  if(m.marks<=0) wy=tailTopY+fg.bodyH*0.45;       // 阿波：水面在標身中段
+  else if(m.per<=0) wy=tailTopY+fg.tailH;
   else wy=tailTopY+Math.max(-16,Math.min(fg.tailH+fg.bodyH*0.7,m.exposed*fg.mh));
   const sH=scene.offsetHeight;
   const w=$("#water");
@@ -436,7 +439,7 @@ function calc(){
   $("#fmeta").innerHTML=`浮力 <b>${f(m.lift0,3)} g</b><br>`
     +`<span style="color:var(--tx3)">${f(m.fen,1)} 分 × 0.375</span>`
     +(m.air>0?`<br>扣標上 ${f(m.air,2)} g → ${f(m.lift,3)} g`:"")
-    +`<br>每目 <b>${f(m.per,3)} g</b>　共 ${m.marks} 目`;
+    +(m.aba?`<br><b style="color:var(--ac)">阿波（無標尾）</b>`:`<br>每目 <b>${f(m.per,3)} g</b>　共 ${m.marks} 目`);
 
   // 每個配件的水中重
   $$(".chip").forEach(c=>{
@@ -450,7 +453,13 @@ function calc(){
   const shown=Math.max(0,Math.min(m.marks,m.exposed)), res=shown*m.per;
   const lb=paintWater(m,fg);
   let dot="var(--warn)", txt;
-  if(m.per<=0||m.marks<=0){ dot="var(--warn)"; txt="請填標尾資料"; }
+  if(m.aba){
+    const r=m.residual;
+    if(r>0.005){ dot=(r<=0.3?"var(--ok)":"var(--warn)"); txt="阿波・殘餘浮力 "+f(r,3)+"g（浮）"; }
+    else if(r<-0.005){ dot="var(--bad)"; txt="阿波・沉 超重 "+f(-r,3)+"g"; }
+    else { dot="var(--ok)"; txt="阿波・平衡"; }
+  }
+  else if(m.per<=0){ dot="var(--warn)"; txt="請填標尾資料"; }
   else if(m.exposed>m.marks){ txt="標尾全露・鉛不夠 "+f(m.lift-m.sink,2)+"g"; }
   else if(m.exposed<0){ dot="var(--bad)"; txt="沉沒・超重 "+f(m.sink-m.total,2)+"g"; }
   else { if(m.exposed>=1&&m.exposed<=3) dot="var(--ok)";
@@ -461,21 +470,33 @@ function calc(){
 
   // 調目
   const t=Math.max(0,N($("#target").value));
-  const dDry=((m.lift+(m.marks-t)*m.per)-m.sink)/(1-1/11.34);
   const tn=$("#tune");
-  if(m.per<=0||m.marks<=0){ tn.className="status s-warn"; tn.textContent="請先填標尾資料。"; $("#bLead").textContent="–"; }
-  else if(t>m.marks){ tn.className="status s-warn"; tn.textContent="目標超過標尾總目數（"+m.marks+" 目）。"; $("#bLead").textContent="–"; }
-  else if(Math.abs(dDry)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 已經很接近露出 "+f(t,1)+" 目，不用調。"; $("#bLead").textContent="不用調"; }
+  if(m.aba){
+    const dDry=m.residual/(1-1/11.34);   // 調到平衡（殘餘浮力 0）
+    if(Math.abs(m.residual)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 阿波已接近平衡，不用調。"; $("#bLead").textContent="不用調"; }
+    else{
+      tn.className="status s-ok";
+      tn.innerHTML="阿波調平衡："+(dDry>0?"<b>加鉛 "+f(dDry,3)+" g</b>":"<b>減鉛 "+f(-dDry,3)+" g</b>")
+        +'<br><span style="color:var(--tx2)">≈ 0.2 g 夾鉛 '+f(Math.abs(dDry)/0.2,1)+" 顆　·　0.05 g 微調鉛 "+f(Math.abs(dDry)/0.05,1)+" 顆</span>";
+      $("#bLead").textContent=(dDry>0?"+":"−")+f(Math.abs(dDry),2)+" g";
+    }
+  }
   else{
-    tn.className="status s-ok";
-    tn.innerHTML="要露出 <b>"+f(t,1)+" 目</b>，"+(dDry>0?"<b>加鉛 "+f(dDry,3)+" g</b>":"<b>減鉛 "+f(-dDry,3)+" g</b>")
-      +'<br><span style="color:var(--tx2)">≈ 0.2 g 夾鉛 '+f(Math.abs(dDry)/0.2,1)+" 顆　·　0.05 g 微調鉛 "+f(Math.abs(dDry)/0.05,1)+" 顆</span>";
-    $("#bLead").textContent=(dDry>0?"+":"−")+f(Math.abs(dDry),2)+" g";
+    const dDry=((m.lift+(m.marks-t)*m.per)-m.sink)/(1-1/11.34);
+    if(m.per<=0){ tn.className="status s-warn"; tn.textContent="請先填標尾資料。"; $("#bLead").textContent="–"; }
+    else if(t>m.marks){ tn.className="status s-warn"; tn.textContent="目標超過標尾總目數（"+m.marks+" 目）。"; $("#bLead").textContent="–"; }
+    else if(Math.abs(dDry)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 已經很接近露出 "+f(t,1)+" 目，不用調。"; $("#bLead").textContent="不用調"; }
+    else{
+      tn.className="status s-ok";
+      tn.innerHTML="要露出 <b>"+f(t,1)+" 目</b>，"+(dDry>0?"<b>加鉛 "+f(dDry,3)+" g</b>":"<b>減鉛 "+f(-dDry,3)+" g</b>")
+        +'<br><span style="color:var(--tx2)">≈ 0.2 g 夾鉛 '+f(Math.abs(dDry)/0.2,1)+" 顆　·　0.05 g 微調鉛 "+f(Math.abs(dDry)/0.05,1)+" 顆</span>";
+      $("#bLead").textContent=(dDry>0?"+":"−")+f(Math.abs(dDry),2)+" g";
+    }
   }
 
   $("#bDot").style.background=dot;
-  $("#bMk").textContent=m.per<=0?"–":(m.exposed<0?"沉沒":(m.exposed>m.marks?"全露":f(m.exposed,1)+" 目"));
-  $("#bRes").textContent=(m.exposed<0||m.per<=0?"0":f(res,3))+" g";
+  $("#bMk").textContent = m.aba ? "阿波" : (m.per<=0?"–":(m.exposed<0?"沉沒":(m.exposed>m.marks?"全露":f(m.exposed,1)+" 目")));
+  $("#bRes").textContent = m.aba ? f(m.residual,3)+" g" : ((m.exposed<0||m.per<=0?"0":f(res,3))+" g");
 }
 
 /* ---------- 拖曳 ---------- */
