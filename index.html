@@ -164,6 +164,14 @@
   .ask-in:focus{border-color:var(--ac)}
   .ask-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
   .fld-off{opacity:.4;pointer-events:none}   /* 阿波時停用標尾相關欄位 */
+  /* 記重方式開關 */
+  #modebar{display:flex;align-items:center;gap:10px;padding:8px 15px;border-bottom:1px solid var(--line);
+           background:#141b23;font-size:12px;color:var(--tx2);flex-wrap:wrap}
+  #modebar .ml{font-size:11.5px;color:var(--tx3)}
+  #modebar .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  #modebar .seg button{background:var(--bg3);color:var(--tx2);border:none;padding:6px 13px;font-size:12.5px;cursor:pointer}
+  #modebar .seg button.on{background:var(--ac);color:#04222b;font-weight:700}
+  #modebar .mh{color:var(--tx3);font-size:11px;flex-basis:100%;line-height:1.45}
   textarea{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--tx);border-radius:8px;
            padding:8px 9px;font-family:inherit;font-size:12.5px;outline:none;resize:vertical;margin-top:6px;word-break:break-all}
   textarea:focus{border-color:var(--ac)}
@@ -175,6 +183,15 @@
   <button class="btn g" id="updBtn">↻ 更新</button>
   <button class="btn g" id="resetBtn">重設</button>
 </header>
+
+<div id="modebar">
+  <span class="ml">記重方式</span>
+  <div class="seg">
+    <button type="button" data-mode="net">秤重</button>
+    <button type="button" data-mode="phys">水中重</button>
+  </div>
+  <span class="mh" id="modeHint"></span>
+</div>
 
 <div class="wrap">
 
@@ -263,7 +280,8 @@
     <summary>▸ 怎麼算的</summary>
     <div>
       <p>浮力＝分 × 0.375 g（1 號 ＝ 10 分 ＝ 3.75 g）。每目浮力＝π×(標尾半徑)²×每目長度。</p>
-      <p>配件在水中的重量＝乾重 ×（1 − 1 ÷ 比重）。鉛剩 91%，塑膠件只剩 12%，比重小於 1 的會變成幫忙提供浮力。插在標上露出水面的東西，則是整個重量壓在浮標身上。</p>
+      <p><b style="color:var(--ac)">記重方式（頂部可切換）：</b>「秤重」＝秤到多少算多少，浮力 − 乾重總和（蝦友常用，預設）；「水中重」＝乾重 ×（1 − 1 ÷ 比重），考慮各材質在水中的浮力（鉛剩 91%、塑膠只剩 12%、比重<1 會提供浮力），較精確。</p>
+      <p>插在標上露出水面的東西，兩種方式都是整個乾重壓在浮標身上。</p>
       <p>露出目數＝總目數 −（水中總配重 − 浮標浮力）÷ 每目浮力。殘餘浮力＝露出那段標尾還沒被抵銷的浮力，越小越靈敏，一般調 1～3 目。</p>
     </div>
   </details>
@@ -298,7 +316,7 @@ const N=v=>{const x=parseFloat(v);return isFinite(x)?x:0;};
 const f=(x,d=2)=>(Math.round(x*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-const MAT=[["鉛",11.34],["金屬",7.90],["塑膠",1.14],["矽膠",1.20],["發泡",0.15],["蝦餌",1.05]];
+const MAT=[["鉛",11.34],["不鏽鋼",7.90],["塑膠",1.14],["矽膠",1.20],["發泡",0.15],["蝦餌",1.05]];
 // 材料庫：分區, 名稱, 單件重, 比重, 預設落點(0=標上 1=浮標以上 2=天秤以上 3=天秤以下), 排序
 const PAL=[
   ["浮標以上","上目印",  0.020,1.20,1,10],
@@ -334,6 +352,8 @@ const SIZES={
 };
 
 let uid=1, items=[], sel=null;
+// 記重方式：net=秤重(浮力−乾重, 蝦友法) / phys=水中重(比重校正)
+let weighMode=(()=>{try{return localStorage.getItem("shrimp_mode")||"net"}catch(e){return "net";}})();
 const P=n=>PAL.find(p=>p[1]===n);
 function add(name,band,q){
   const p=P(name);
@@ -355,13 +375,15 @@ function model(){
   let air=0,sink=0;
   items.forEach(i=>{ if(!i.on||i.count===false)return;
     if(i.lift!=null){ if(i.b!==0) sink+=-i.lift*i.q; return; }   // 浮力件：水下提供向上浮力（負配重）
-    if(i.b===0) air+=i.w*i.q; else sink+=i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q; });
+    if(i.b===0) air+=i.w*i.q;
+    else sink += weighMode==="net" ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q); });
   const lift=lift0-air;
   const exposed=per>0?marks-(sink-lift)/per:0;
   const residual=lift-sink;   // 淨浮力（阿波無標尾時看這個）
   return {fen,lift0,air,lift,marks,per,total:lift+per*marks,sink,exposed,residual,aba:marks<=0};
 }
-const effOf=i=> i.lift!=null ? (i.b===0?0:-i.lift*i.q) : (i.b===0 ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q));
+const effOf=i=> i.lift!=null ? (i.b===0?0:-i.lift*i.q)
+  : (i.b===0 ? i.w*i.q : (weighMode==="net" ? i.w*i.q : (i.s>0?i.w*i.q*(1-1/i.s):i.w*i.q)));
 
 /* ---------- 畫面 ---------- */
 function paintBands(){
@@ -535,7 +557,7 @@ function calc(){
   const t=Math.max(0,N($("#target").value));
   const tn=$("#tune");
   if(m.aba){
-    const dDry=m.residual/(1-1/11.34);   // 調到平衡（殘餘浮力 0）
+    const dDry=weighMode==="net"?m.residual:m.residual/(1-1/11.34);   // 調到平衡（殘餘浮力 0）
     if(Math.abs(m.residual)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 阿波已接近平衡，不用調。"; $("#bLead").textContent="不用調"; }
     else{
       tn.className="status s-ok";
@@ -545,7 +567,8 @@ function calc(){
     }
   }
   else{
-    const dDry=((m.lift+(m.marks-t)*m.per)-m.sink)/(1-1/11.34);
+    const need=(m.lift+(m.marks-t)*m.per)-m.sink;
+    const dDry=weighMode==="net"?need:need/(1-1/11.34);
     if(m.per<=0){ tn.className="status s-warn"; tn.textContent="請先填標尾資料。"; $("#bLead").textContent="–"; }
     else if(t>m.marks){ tn.className="status s-warn"; tn.textContent="目標超過標尾總目數（"+m.marks+" 目）。"; $("#bLead").textContent="–"; }
     else if(Math.abs(dDry)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 已經很接近露出 "+f(t,1)+" 目，不用調。"; $("#bLead").textContent="不用調"; }
@@ -787,7 +810,18 @@ $("#impCfg").onclick=()=>{
   io.appendChild(go);
 };
 
+/* ---------- 記重方式開關 ---------- */
+function updateModeUI(){
+  $$("#modebar .seg button").forEach(b=>b.classList.toggle("on",b.dataset.mode===weighMode));
+  $("#modeHint").textContent = weighMode==="net"
+    ? "秤到多少算多少：浮力 − 乾重總和（蝦友常用）"
+    : "考慮各材質在水中的浮力：乾重 ×（1 − 1/比重），較精確";
+}
+function setMode(m){ weighMode=m; try{localStorage.setItem("shrimp_mode",m);}catch(e){} updateModeUI(); calc(); }
+$$("#modebar .seg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+
 window.addEventListener("resize",()=>calc());
+updateModeUI();
 reset();
 renderCfg();
 })();
