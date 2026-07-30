@@ -143,6 +143,15 @@
   /* 不計重的配件 */
   .chip.nocount{opacity:.62;border-style:dashed}
   .chip.nocount .e{color:var(--tx3)!important}
+
+  /* 我的線組 */
+  .cfgrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .cfgrow:last-child{border-bottom:none}
+  .cfgn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .cfgrow .btn{padding:5px 12px}
+  textarea{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--tx);border-radius:8px;
+           padding:8px 9px;font-family:inherit;font-size:12.5px;outline:none;resize:vertical;margin-top:6px;word-break:break-all}
+  textarea:focus{border-color:var(--ac)}
 </style>
 </head>
 <body>
@@ -211,6 +220,18 @@
       <div style="display:flex;align-items:flex-end"><button class="btn" id="copyBtn" style="width:100%">複製摘要</button></div>
     </div>
     <div class="status" id="tune"></div>
+  </div>
+
+  <!-- 我的線組 -->
+  <div class="card">
+    <h2>我的線組 <span class="tag">存這支手機</span></h2>
+    <button class="btn" id="saveCfg" style="width:100%;margin-bottom:8px">＋ 儲存目前線組</button>
+    <div id="cfgList"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn g" id="expCfg" style="flex:1">匯出設定碼</button>
+      <button class="btn g" id="impCfg" style="flex:1">匯入設定碼</button>
+    </div>
+    <div id="cfgIO"></div>
   </div>
 
   <details class="card" style="padding:10px 12px">
@@ -641,8 +662,60 @@ $("#fab").onclick=openMat;
 $("#matDone").onclick=closeMat;
 $("#matback").addEventListener("pointerdown",closeMat);
 
+/* ---------- 我的線組（localStorage 具名 + 匯出/匯入碼）---------- */
+const LSK="shrimp_rigs_v1";
+function loadStore(){ try{return JSON.parse(localStorage.getItem(LSK))||{}}catch(e){return {};} }
+function saveStore(o){ try{localStorage.setItem(LSK,JSON.stringify(o));return true;}catch(e){return false;} }
+function snapshot(){ return {fen:$("#fen").value,marks:$("#marks").value,tL:$("#tL").value,tD:$("#tD").value,target:$("#target").value,items:items.map(i=>({...i}))}; }
+function restore(d){
+  if(!d||!Array.isArray(d.items)) throw new Error("bad");
+  if(d.fen!=null)$("#fen").value=d.fen; if(d.marks!=null)$("#marks").value=d.marks;
+  if(d.tL!=null)$("#tL").value=d.tL; if(d.tD!=null)$("#tD").value=d.tD; if(d.target!=null)$("#target").value=d.target;
+  items=d.items.map(i=>({...i}));
+  uid=items.reduce((m,i)=>Math.max(m,i.id||0),0)+1;
+  sel=null; render();
+}
+function encodeCfg(d){ return btoa(unescape(encodeURIComponent(JSON.stringify(d)))); }
+function decodeCfg(s){ return JSON.parse(decodeURIComponent(escape(atob(String(s).trim())))); }
+function renderCfg(){
+  const store=loadStore(), names=Object.keys(store), box=$("#cfgList");
+  if(!names.length){ box.innerHTML='<div class="empty">還沒有存線組</div>'; return; }
+  box.innerHTML="";
+  names.forEach(nm=>{
+    const row=document.createElement("div"); row.className="cfgrow";
+    const s=document.createElement("span"); s.className="cfgn"; s.textContent=nm;
+    const bl=document.createElement("button"); bl.className="btn"; bl.textContent="載入";
+    bl.onclick=()=>{ try{restore(loadStore()[nm]);toast("已載入「"+nm+"」");}catch(e){toast("載入失敗");} };
+    const bd=document.createElement("button"); bd.className="btn g"; bd.textContent="刪";
+    bd.onclick=()=>{ const st=loadStore(); delete st[nm]; saveStore(st); renderCfg(); };
+    row.append(s,bl,bd); box.appendChild(row);
+  });
+}
+$("#saveCfg").onclick=()=>{
+  const name=(prompt("線組名稱：")||"").trim(); if(!name)return;
+  const store=loadStore(), existed=name in store; store[name]=snapshot();
+  if(saveStore(store)){ renderCfg(); toast((existed?"已更新「":"已儲存「")+name+"」"); }
+  else toast("這個瀏覽器無法儲存");
+};
+$("#expCfg").onclick=()=>{
+  const code=encodeCfg(snapshot()), io=$("#cfgIO");
+  io.innerHTML='<label style="margin-top:8px">匯出碼（複製起來備份或傳蝦友）</label>';
+  const ta=document.createElement("textarea"); ta.readOnly=true; ta.rows=3; ta.value=code; io.appendChild(ta);
+  ta.focus(); ta.select();
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(()=>toast("已複製匯出碼"),()=>{});
+};
+$("#impCfg").onclick=()=>{
+  const io=$("#cfgIO");
+  io.innerHTML='<label style="margin-top:8px">貼上匯出碼</label>';
+  const ta=document.createElement("textarea"); ta.rows=3; ta.placeholder="貼上這裡…"; io.appendChild(ta);
+  const go=document.createElement("button"); go.className="btn"; go.textContent="套用匯入"; go.style.marginTop="6px";
+  go.onclick=()=>{ try{ restore(decodeCfg(ta.value)); io.innerHTML=""; toast("已匯入"); }catch(e){ toast("匯入碼無效"); } };
+  io.appendChild(go);
+};
+
 window.addEventListener("resize",()=>calc());
 reset();
+renderCfg();
 })();
 </script>
 </body>
