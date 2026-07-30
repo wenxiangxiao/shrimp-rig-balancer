@@ -146,10 +146,24 @@
   .chip.nocount .e{color:var(--tx3)!important}
 
   /* 我的線組 */
-  .cfgrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
-  .cfgrow:last-child{border-bottom:none}
+  .cfgitem{border-bottom:1px solid var(--line)}
+  .cfgitem:last-child{border-bottom:none}
+  .cfgrow{display:flex;align-items:center;gap:8px;padding:7px 0}
   .cfgn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
   .cfgrow .btn{padding:5px 12px}
+  .cfgmore{display:flex;gap:8px;padding:0 0 9px;flex-wrap:wrap}
+  .cfgmore .btn{padding:5px 11px;font-size:12px}
+  /* 自製輸入彈窗 */
+  .ask-back{position:fixed;inset:0;background:rgba(8,11,15,.55);z-index:90;display:flex;
+            align-items:center;justify-content:center;padding:20px;animation:fade .15s ease}
+  .ask-dlg{background:var(--bg3);border:1px solid var(--ac);border-radius:12px;padding:14px;
+           width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,.6);animation:sheet .18s ease}
+  .ask-t{font-size:14px;font-weight:700;margin-bottom:10px}
+  .ask-in{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--tx);
+          border-radius:8px;padding:10px;font-size:15px;outline:none;font-family:inherit}
+  .ask-in:focus{border-color:var(--ac)}
+  .ask-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .fld-off{opacity:.4;pointer-events:none}   /* 阿波時停用標尾相關欄位 */
   textarea{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--tx);border-radius:8px;
            padding:8px 9px;font-family:inherit;font-size:12.5px;outline:none;resize:vertical;margin-top:6px;word-break:break-all}
   textarea:focus{border-color:var(--ac)}
@@ -195,12 +209,12 @@
         <div class="stp" data-step="1" data-min="0" data-dec="0">
           <button class="sbtn" data-d="-">−</button><input id="marks" inputmode="numeric" value="8" readonly><button class="sbtn" data-d="+">＋</button>
         </div></div>
-      <div><label>每目長 (mm)</label>
+      <div id="fldTL"><label>每目長 (mm)</label>
         <div class="stp" data-step="1" data-min="1" data-dec="0">
           <button class="sbtn" data-d="-">−</button><input id="tL" inputmode="numeric" value="15" readonly><button class="sbtn" data-d="+">＋</button>
         </div></div>
     </div>
-    <div><label>標尾粗細</label>
+    <div id="fldTD"><label>標尾粗細</label>
       <select id="tD">
         <option value="1.2">細尾 1.2 mm</option>
         <option value="2.0" selected>一般 2.0 mm</option>
@@ -458,6 +472,8 @@ function paintWater(m,fg){
 
 function calc(){
   const m=model();
+  $("#fldTL").classList.toggle("fld-off",m.aba);   // 阿波：標尾相關欄位停用
+  $("#fldTD").classList.toggle("fld-off",m.aba);
   const fg=drawFloat(m);
   $("#fTag").textContent=f(m.lift,2)+" g 浮力";
   $("#fmeta").innerHTML=`浮力 <b>${f(m.lift0,3)} g</b><br>`
@@ -665,6 +681,28 @@ $("#fab").onclick=openMat;
 $("#matDone").onclick=closeMat;
 $("#matback").addEventListener("pointerdown",closeMat);
 
+/* ---------- 自製輸入彈窗（取代原生 prompt）---------- */
+function askText(title,def){
+  return new Promise(resolve=>{
+    const bd=document.createElement("div"); bd.className="ask-back";
+    const dlg=document.createElement("div"); dlg.className="ask-dlg";
+    const t=document.createElement("div"); t.className="ask-t"; t.textContent=title;
+    const inp=document.createElement("input"); inp.type="text"; inp.className="ask-in"; inp.value=def||"";
+    const btns=document.createElement("div"); btns.className="ask-btns";
+    const cancel=document.createElement("button"); cancel.className="btn g"; cancel.textContent="取消";
+    const ok=document.createElement("button"); ok.className="btn"; ok.textContent="確定";
+    function close(v){ bd.remove(); document.removeEventListener("keydown",onKey); resolve(v); }
+    function onKey(e){ if(e.key==="Escape") close(null); }
+    cancel.onclick=()=>close(null);
+    ok.onclick=()=>close(inp.value);
+    inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); close(inp.value); } });
+    bd.addEventListener("pointerdown",e=>{ if(e.target===bd) close(null); });
+    document.addEventListener("keydown",onKey);
+    btns.append(cancel,ok); dlg.append(t,inp,btns); bd.appendChild(dlg); document.body.appendChild(bd);
+    setTimeout(()=>{ inp.focus(); inp.select(); },30);
+  });
+}
+
 /* ---------- 我的線組（localStorage 具名 + 匯出/匯入碼）---------- */
 const LSK="shrimp_rigs_v1";
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LSK))||{}}catch(e){return {};} }
@@ -685,17 +723,26 @@ function renderCfg(){
   if(!names.length){ box.innerHTML='<div class="empty">還沒有存線組</div>'; return; }
   box.innerHTML="";
   names.forEach(nm=>{
+    const wrap=document.createElement("div"); wrap.className="cfgitem";
     const row=document.createElement("div"); row.className="cfgrow";
     const s=document.createElement("span"); s.className="cfgn"; s.textContent=nm;
     const bl=document.createElement("button"); bl.className="btn"; bl.textContent="載入";
     bl.onclick=()=>{ try{restore(loadStore()[nm]);toast("已載入「"+nm+"」");}catch(e){toast("載入失敗");} };
-    const bd=document.createElement("button"); bd.className="btn g"; bd.textContent="刪";
+    const more=document.createElement("button"); more.className="btn g"; more.textContent="⋯";
+    const act=document.createElement("div"); act.className="cfgmore"; act.style.display="none";
+    const bu=document.createElement("button"); bu.className="btn"; bu.textContent="更新為目前";
+    bu.onclick=()=>{ const st=loadStore(); st[nm]=snapshot(); if(saveStore(st))toast("已更新「"+nm+"」"); else toast("無法儲存"); act.style.display="none"; };
+    const brn=document.createElement("button"); brn.className="btn"; brn.textContent="改名";
+    brn.onclick=async ()=>{ const nn=((await askText("新名稱",nm))||"").trim(); if(!nn||nn===nm)return; const st=loadStore(); st[nn]=st[nm]; delete st[nm]; saveStore(st); renderCfg(); toast("已改名為「"+nn+"」"); };
+    const bd=document.createElement("button"); bd.className="btn g"; bd.textContent="刪除"; bd.style.color="var(--bad)";
     bd.onclick=()=>{ const st=loadStore(); delete st[nm]; saveStore(st); renderCfg(); };
-    row.append(s,bl,bd); box.appendChild(row);
+    act.append(bu,brn,bd);
+    more.onclick=()=>{ act.style.display = act.style.display==="none"?"flex":"none"; };
+    row.append(s,bl,more); wrap.append(row,act); box.appendChild(wrap);
   });
 }
-$("#saveCfg").onclick=()=>{
-  const name=(prompt("線組名稱：")||"").trim(); if(!name)return;
+$("#saveCfg").onclick=async ()=>{
+  const name=((await askText("線組名稱",""))||"").trim(); if(!name)return;
   const store=loadStore(), existed=name in store; store[name]=snapshot();
   if(saveStore(store)){ renderCfg(); toast((existed?"已更新「":"已儲存「")+name+"」"); }
   else toast("這個瀏覽器無法儲存");
