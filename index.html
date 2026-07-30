@@ -172,6 +172,14 @@
   #modebar .seg button{background:var(--bg3);color:var(--tx2);border:none;padding:6px 13px;font-size:12.5px;cursor:pointer}
   #modebar .seg button.on{background:var(--ac);color:#04222b;font-weight:700}
   #modebar .mh{color:var(--tx3);font-size:11px;flex-basis:100%;line-height:1.45}
+  /* 目前存檔列 */
+  #curbar{display:none;align-items:center;gap:10px;padding:8px 15px;border-bottom:1px solid var(--line);background:#12202a}
+  #curbar .cc-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--tx2)}
+  #curbar .cc-n b{color:var(--ac)}
+  #curbar .dirty{color:var(--warn);font-size:11px;margin-left:6px}
+  #curbar .btn{padding:5px 12px;flex:none}
+  .cfgitem.active{background:rgba(63,185,214,.08);border-radius:8px}
+  .cfgitem.active .cfgn::before{content:"● ";color:var(--ac);font-size:10px}
   textarea{width:100%;background:var(--bg3);border:1px solid var(--line);color:var(--tx);border-radius:8px;
            padding:8px 9px;font-family:inherit;font-size:12.5px;outline:none;resize:vertical;margin-top:6px;word-break:break-all}
   textarea:focus{border-color:var(--ac)}
@@ -192,6 +200,8 @@
   </div>
   <span class="mh" id="modeHint"></span>
 </div>
+
+<div id="curbar"></div>
 
 <div class="wrap">
 
@@ -255,9 +265,13 @@
   <div class="card">
     <h2>調目</h2>
     <div class="row r2" style="margin-bottom:9px">
-      <div><label>想露出幾目</label>
+      <div id="fldTarget"><label>想露出幾目</label>
         <div class="stp" data-step="0.5" data-min="0" data-dec="1">
           <button class="sbtn" data-d="-">−</button><input id="target" inputmode="decimal" value="2" readonly><button class="sbtn" data-d="+">＋</button>
+        </div></div>
+      <div id="fldReserve" style="display:none"><label>想保留殘餘浮力 (g)</label>
+        <div class="stp" data-step="0.01" data-min="0" data-dec="2">
+          <button class="sbtn" data-d="-">−</button><input id="reserve" inputmode="decimal" value="0.06" readonly><button class="sbtn" data-d="+">＋</button>
         </div></div>
       <div style="display:flex;align-items:flex-end"><button class="btn" id="copyBtn" style="width:100%">複製摘要</button></div>
     </div>
@@ -353,6 +367,7 @@ const SIZES={
 let uid=1, items=[], sel=null;
 // 記重方式：net=秤重(浮力−乾重, 蝦友法) / phys=水中重(比重校正)
 let weighMode=(()=>{try{return localStorage.getItem("shrimp_mode")||"net"}catch(e){return "net";}})();
+let currentCfg=null;   // 目前載入/儲存的存檔名稱
 const P=n=>PAL.find(p=>p[1]===n);
 function add(name,band,q){
   const p=P(name);
@@ -518,6 +533,8 @@ function calc(){
   $("#fldTL").classList.toggle("fld-off",m.aba);   // 阿波：標尾相關欄位停用
   $("#fldTD").classList.toggle("fld-off",m.aba);
   $("#fldShape").classList.toggle("fld-off",!m.aba);   // 阿波外型：只有阿波時能選
+  $("#fldTarget").style.display = m.aba ? "none" : "";     // 阿波用殘餘浮力目標，一般用目數
+  $("#fldReserve").style.display = m.aba ? "" : "none";
   const fg=drawFloat(m);
   $("#fTag").textContent=f(m.lift,2)+" g 浮力";
   $("#fmeta").innerHTML=`浮力 <b>${f(m.lift0,3)} g</b><br>`
@@ -556,11 +573,13 @@ function calc(){
   const t=Math.max(0,N($("#target").value));
   const tn=$("#tune");
   if(m.aba){
-    const dDry=weighMode==="net"?m.residual:m.residual/(1-1/11.34);   // 調到平衡（殘餘浮力 0）
-    if(Math.abs(m.residual)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 阿波已接近平衡，不用調。"; $("#bLead").textContent="不用調"; }
+    const reserve=Math.max(0,N($("#reserve").value));   // 想保留的殘餘浮力
+    const gap=m.residual-reserve;                        // 還要移除多少殘餘（正=加鉛）
+    const dDry=weighMode==="net"?gap:gap/(1-1/11.34);
+    if(Math.abs(gap)<0.005){ tn.className="status s-ok"; tn.innerHTML="🎯 阿波已達理想（保留殘餘 "+f(reserve,2)+"g），不用調。"; $("#bLead").textContent="不用調"; }
     else{
       tn.className="status s-ok";
-      tn.innerHTML="阿波調平衡："+(dDry>0?"<b>加鉛 "+f(dDry,3)+" g</b>":"<b>減鉛 "+f(-dDry,3)+" g</b>")
+      tn.innerHTML="阿波保留殘餘 <b>"+f(reserve,2)+"g</b>："+(dDry>0?"<b>加鉛 "+f(dDry,3)+" g</b>":"<b>減鉛 "+f(-dDry,3)+" g</b>")
         +'<br><span style="color:var(--tx2)">≈ 0.2 g 夾鉛 '+f(Math.abs(dDry)/0.2,1)+" 顆　·　0.05 g 微調鉛 "+f(Math.abs(dDry)/0.05,1)+" 顆</span>";
       $("#bLead").textContent=(dDry>0?"+":"−")+f(Math.abs(dDry),2)+" g";
     }
@@ -582,6 +601,7 @@ function calc(){
   $("#bDot").style.background=dot;
   $("#bMk").textContent = m.aba ? "阿波" : (m.per<=0?"–":(m.exposed<0?"沉沒":(m.exposed>m.marks?"全露":f(m.exposed,1)+" 目")));
   $("#bRes").textContent = m.aba ? f(m.residual,3)+" g" : ((m.exposed<0||m.per<=0?"0":f(res,3))+" g");
+  updateCurCfg();
 }
 
 /* ---------- 拖曳 ---------- */
@@ -675,7 +695,7 @@ $("#scene").addEventListener("pointerdown",e=>{
 });
 $("#fsvg").onclick=()=>{ $("#fen").focus(); $("#fen").scrollIntoView({block:"center",behavior:"smooth"}); };
 
-["fen","marks","tL","tD","target","shape"].forEach(id=>{
+["fen","marks","tL","tD","target","shape","reserve"].forEach(id=>{
   const e=document.getElementById(id);
   e.addEventListener("input",calc); e.addEventListener("change",calc);
 });
@@ -752,11 +772,12 @@ function askText(title,def){
 const LSK="shrimp_rigs_v1";
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LSK))||{}}catch(e){return {};} }
 function saveStore(o){ try{localStorage.setItem(LSK,JSON.stringify(o));return true;}catch(e){return false;} }
-function snapshot(){ return {fen:$("#fen").value,marks:$("#marks").value,tL:$("#tL").value,tD:$("#tD").value,target:$("#target").value,shape:$("#shape").value,items:items.map(i=>({...i}))}; }
+function snapshot(){ return {fen:$("#fen").value,marks:$("#marks").value,tL:$("#tL").value,tD:$("#tD").value,target:$("#target").value,reserve:$("#reserve").value,shape:$("#shape").value,items:items.map(i=>({...i}))}; }
 function restore(d){
   if(!d||!Array.isArray(d.items)) throw new Error("bad");
   if(d.fen!=null)$("#fen").value=d.fen; if(d.marks!=null)$("#marks").value=d.marks;
   if(d.tL!=null)$("#tL").value=d.tL; if(d.tD!=null)$("#tD").value=d.tD; if(d.target!=null)$("#target").value=d.target;
+  if(d.reserve!=null)$("#reserve").value=d.reserve;
   if(d.shape!=null)$("#shape").value=d.shape;
   items=d.items.map(i=>({...i}));
   uid=items.reduce((m,i)=>Math.max(m,i.id||0),0)+1;
@@ -764,33 +785,48 @@ function restore(d){
 }
 function encodeCfg(d){ return btoa(unescape(encodeURIComponent(JSON.stringify(d)))); }
 function decodeCfg(s){ return JSON.parse(decodeURIComponent(escape(atob(String(s).trim())))); }
+let _ccKey="";
+function updateCurCfg(){
+  const bar=$("#curbar"), store=loadStore();
+  if(!currentCfg || !store[currentCfg]){ if(_ccKey!==""){_ccKey="";bar.style.display="none";bar.innerHTML="";} return; }
+  const dirty=JSON.stringify(snapshot())!==JSON.stringify(store[currentCfg]);
+  const key=currentCfg+"|"+dirty;
+  if(key===_ccKey) return;
+  _ccKey=key; bar.innerHTML="";
+  const n=document.createElement("span"); n.className="cc-n";
+  n.innerHTML="目前存檔：<b>"+esc(currentCfg)+"</b>"+(dirty?'<span class="dirty">● 已修改</span>':'');
+  const btn=document.createElement("button"); btn.className="btn"+(dirty?"":" g"); btn.textContent=dirty?"更新此存檔":"已是最新";
+  btn.onclick=()=>{ if(!dirty)return; const st=loadStore(); st[currentCfg]=snapshot(); if(saveStore(st)){ toast("已更新「"+currentCfg+"」"); _ccKey=""; updateCurCfg(); renderCfg(); } };
+  bar.append(n,btn); bar.style.display="flex";
+}
 function renderCfg(){
   const store=loadStore(), names=Object.keys(store), box=$("#cfgList");
-  if(!names.length){ box.innerHTML='<div class="empty">還沒有存線組</div>'; return; }
+  if(!names.length){ box.innerHTML='<div class="empty">還沒有存線組</div>'; updateCurCfg(); return; }
   box.innerHTML="";
   names.forEach(nm=>{
-    const wrap=document.createElement("div"); wrap.className="cfgitem";
+    const wrap=document.createElement("div"); wrap.className="cfgitem"+(nm===currentCfg?" active":"");
     const row=document.createElement("div"); row.className="cfgrow";
     const s=document.createElement("span"); s.className="cfgn"; s.textContent=nm;
     const bl=document.createElement("button"); bl.className="btn"; bl.textContent="載入";
-    bl.onclick=()=>{ try{restore(loadStore()[nm]);toast("已載入「"+nm+"」");}catch(e){toast("載入失敗");} };
+    bl.onclick=()=>{ try{ const d=loadStore()[nm]; currentCfg=nm; restore(d); toast("已載入「"+nm+"」"); renderCfg(); }catch(e){ toast("載入失敗"); } };
     const more=document.createElement("button"); more.className="btn g"; more.textContent="⋯";
     const act=document.createElement("div"); act.className="cfgmore"; act.style.display="none";
     const bu=document.createElement("button"); bu.className="btn"; bu.textContent="更新為目前";
-    bu.onclick=()=>{ const st=loadStore(); st[nm]=snapshot(); if(saveStore(st))toast("已更新「"+nm+"」"); else toast("無法儲存"); act.style.display="none"; };
+    bu.onclick=()=>{ const st=loadStore(); st[nm]=snapshot(); if(saveStore(st)){currentCfg=nm;toast("已更新「"+nm+"」");renderCfg();} else toast("無法儲存"); };
     const brn=document.createElement("button"); brn.className="btn"; brn.textContent="改名";
-    brn.onclick=async ()=>{ const nn=((await askText("新名稱",nm))||"").trim(); if(!nn||nn===nm)return; const st=loadStore(); st[nn]=st[nm]; delete st[nm]; saveStore(st); renderCfg(); toast("已改名為「"+nn+"」"); };
+    brn.onclick=async ()=>{ const nn=((await askText("新名稱",nm))||"").trim(); if(!nn||nn===nm)return; const st=loadStore(); st[nn]=st[nm]; delete st[nm]; saveStore(st); if(currentCfg===nm)currentCfg=nn; renderCfg(); toast("已改名為「"+nn+"」"); };
     const bd=document.createElement("button"); bd.className="btn g"; bd.textContent="刪除"; bd.style.color="var(--bad)";
-    bd.onclick=()=>{ const st=loadStore(); delete st[nm]; saveStore(st); renderCfg(); };
+    bd.onclick=()=>{ const st=loadStore(); delete st[nm]; saveStore(st); if(currentCfg===nm)currentCfg=null; renderCfg(); };
     act.append(bu,brn,bd);
     more.onclick=()=>{ act.style.display = act.style.display==="none"?"flex":"none"; };
     row.append(s,bl,more); wrap.append(row,act); box.appendChild(wrap);
   });
+  updateCurCfg();
 }
 $("#saveCfg").onclick=async ()=>{
   const name=((await askText("線組名稱",""))||"").trim(); if(!name)return;
   const store=loadStore(), existed=name in store; store[name]=snapshot();
-  if(saveStore(store)){ renderCfg(); toast((existed?"已更新「":"已儲存「")+name+"」"); }
+  if(saveStore(store)){ currentCfg=name; renderCfg(); toast((existed?"已更新「":"已儲存「")+name+"」"); }
   else toast("這個瀏覽器無法儲存");
 };
 $("#expCfg").onclick=()=>{
@@ -805,7 +841,7 @@ $("#impCfg").onclick=()=>{
   io.innerHTML='<label style="margin-top:8px">貼上匯出碼</label>';
   const ta=document.createElement("textarea"); ta.rows=3; ta.placeholder="貼上這裡…"; io.appendChild(ta);
   const go=document.createElement("button"); go.className="btn"; go.textContent="套用匯入"; go.style.marginTop="6px";
-  go.onclick=()=>{ try{ restore(decodeCfg(ta.value)); io.innerHTML=""; toast("已匯入"); }catch(e){ toast("匯入碼無效"); } };
+  go.onclick=()=>{ try{ restore(decodeCfg(ta.value)); currentCfg=null; renderCfg(); io.innerHTML=""; toast("已匯入"); }catch(e){ toast("匯入碼無效"); } };
   io.appendChild(go);
 };
 
